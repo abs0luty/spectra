@@ -13,19 +13,19 @@ var a = 3;
 Function expression:
 
 ```
-var a = fun () => {
-
+var even = fun (n) {
+	n % 2 == 0
 };
 ```
 
 If expression:
 
 ```
-var a = if a == 3 {
-	println("hello?");
+print("number a is " + if a % 2 == 0 {
+	"even"
 } else {
-	println("hello world");
-};
+	"odd"
+});
 ```
 
 While expression:
@@ -42,11 +42,11 @@ Classes:
 class Point {
 	x, 
 	y,
-	constructor (x, y) => {
+	constructor (x, y) {
 		this.x = x;
 		this.y = y;
 	}
-	distance_from (other_point) => { todo(); }
+	distance_from (other_point) { todo() }
 }
 ```
 
