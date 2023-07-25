@@ -37,7 +37,10 @@ impl<'s> Parser<'s> {
                 })
             }
         } else {
-            todo!()
+            Err(ParseError {
+                expected: expected.to_string(),
+                got: None,
+            })
         }
     }
 
