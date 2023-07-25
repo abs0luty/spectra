@@ -13,7 +13,7 @@ var a = 3;
 Function expression:
 
 ```
-var even = fun (n) => {
+var even = fun (n) {
 	n % 2 == 0
 };
 ```
@@ -42,11 +42,11 @@ Classes:
 class Point {
 	x, 
 	y,
-	constructor (x, y) => {
+	constructor (x, y) {
 		this.x = x;
 		this.y = y;
 	}
-	distance_from (other_point) => { todo() }
+	distance_from (other_point) { todo() }
 }
 ```
 
