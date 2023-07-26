@@ -76,7 +76,7 @@ class Point {
     - [x] Parse `continue` statement
     - [x] Parse expression statement
     - [ ] Parse class statement
-- [ ] Walk tree interpreter
+- [ ] Tree-walk interpreter
   - [ ] Implement scopes
   - [ ] Evaluate expressions
     - [ ] Evaluate binary expression
