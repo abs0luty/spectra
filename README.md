@@ -79,11 +79,11 @@ class Point {
 - [ ] Walk tree interpreter
   - [ ] Implement scopes
   - [ ] Evaluate expressions
-    - [ ] Parse binary expression
-    - [ ] Parse postfix expression
-    - [ ] Parse prefix expression
-    - [ ] Parse if expression
-    - [ ] Parse while expression
+    - [ ] Evaluate binary expression
+    - [ ] Evaluate postfix expression
+    - [ ] Evaluate prefix expression
+    - [ ] Evaluate if expression
+    - [ ] Evaluate while expression
   - [ ] Evaluate statements
     - [ ] Evaluate `break` statement
     - [ ] Evaluate `continue` statement
