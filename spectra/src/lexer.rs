@@ -101,7 +101,7 @@ impl<'s> Lexer<'s> {
         token
     }
 
-    fn next_identifier_or_keyword(&mut self) -> Token {
+    fn next_identifier_or_keyword_token(&mut self) -> Token {
         let start_offset = self.offset;
         let identifier_candidate =
             self.advance_while(start_offset, |current, _| is_id_continue(current));
@@ -116,6 +116,28 @@ impl<'s> Lexer<'s> {
                 raw: RawToken::Identifier(identifier_candidate.to_owned()),
                 location: self.location_from(start_offset),
             }
+        }
+    }
+
+    // TODO: process floating-point numbers
+    fn next_number_token(&mut self) -> Token {
+        let start_offset = self.offset;
+        let number_string = self.advance_while(start_offset, |current, _| current.is_ascii_digit());
+
+        Token {
+            raw: RawToken::IntegerLiteral(number_string.parse().unwrap()),
+            location: self.location_from(start_offset),
+        }
+    }
+
+    fn next_string_token(&mut self) -> Token {
+        let start_offset = self.offset;
+
+        let string = self.advance_while(start_offset, |current, _| current != '"');
+
+        Token {
+            raw: RawToken::StringLiteral(string.to_owned()),
+            location: self.location_from(start_offset),
         }
     }
 }
@@ -149,9 +171,14 @@ impl Iterator for Lexer<'_> {
             ('{', _) => self.advance_with(Punctuation::OpenBrace),
             ('}', _) => self.advance_with(Punctuation::CloseBrace),
             (';', _) => self.advance_with(Punctuation::Semicolon),
+            (',', _) => self.advance_with(Punctuation::Comma),
+            ('.', _) => self.advance_with(Punctuation::Dot),
+            ('"', _) => self.next_string_token(),
             (_, _) => {
                 if is_id_start(self.current) {
-                    self.next_identifier_or_keyword()
+                    self.next_identifier_or_keyword_token()
+                } else if self.current.is_ascii_digit() {
+                    self.next_number_token()
                 } else {
                     Token {
                         raw: RawToken::UnexpectedChar(self.current),

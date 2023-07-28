@@ -1,13 +1,24 @@
-use crate::token::{Location, RawToken, Token};
+use crate::token::{Location, Token};
 
+pub type Module = Vec<Statement>;
 pub type StatementsBlock = Vec<Statement>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
-    Expression(Expression),
-    Return { location: Location, value: Expression },
-    Break { location: Location },
-    Continue { location: Location },
+    Expression {
+        location: Location,
+        expression: Expression,
+    },
+    Return {
+        location: Location,
+        return_value: Expression,
+    },
+    Break {
+        location: Location,
+    },
+    Continue {
+        location: Location,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,22 +30,50 @@ pub enum Expression {
         left: Box<Expression>,
         right: Box<Expression>,
         operator: Token,
+        location: Location,
     },
     // a++
     Postfix {
         left: Box<Expression>,
         operator: Token,
+        location: Location,
     },
     // !a
     Prefix {
         operator: Token,
         right: Box<Expression>,
-    },
-    // a
-    Identifier {
-        identifier: String,
         location: Location,
     },
+    // a
+    Identifier(IdentifierAST),
+    // a()
+    Call {
+        callee: Box<Expression>,
+        arguments: Vec<Expression>,
+        location: Location,
+    },
+    // a.b
+    FieldAccess {
+        left: Box<Expression>,
+        right: IdentifierAST,
+        location: Location,
+    },
+}
+
+impl Expression {
+    #[inline]
+    #[must_use]
+    pub const fn location(&self) -> Location {
+        match self {
+            Self::Identifier(IdentifierAST { location, .. })
+            | Self::Prefix { location, .. }
+            | Self::Postfix { location, .. }
+            | Self::Binary { location, .. }
+            | Self::Literal(Literal { location, .. })
+            | Self::Call { location, .. }
+            | Self::FieldAccess { location, .. } => *location,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,11 +83,16 @@ pub struct Literal {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct IdentifierAST {
+    pub identifier: String,
+    pub location: Location,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum RawLiteral {
-    Integer(u64), 
-    Float(f64), 
-    String(String), 
+    Integer(u64),
+    Float(f64),
+    String(String),
     Char(char),
     Bool(bool),
 }
-

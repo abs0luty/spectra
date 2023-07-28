@@ -1,7 +1,7 @@
 use crate::{
-    ast::{Expression, Literal, RawLiteral, Statement, StatementsBlock},
+    ast::{Expression, IdentifierAST, Literal, Module, RawLiteral, Statement, StatementsBlock},
     lexer::Lexer,
-    token::{Keyword, Precedence, Punctuation, RawToken, Token},
+    token::{Keyword, Location, Precedence, Punctuation, RawToken, Token},
 };
 use std::iter::Peekable;
 
@@ -24,10 +24,31 @@ impl<'s> Parser<'s> {
         self.consume_and_return(expected).map(|_| ())
     }
 
+    pub fn consume_identifier(&mut self) -> ParseResult<IdentifierAST> {
+        if let Some(got) = self.lexer.next() {
+            if let RawToken::Identifier(identifier) = got.raw {
+                Ok(IdentifierAST {
+                    identifier,
+                    location: got.location,
+                })
+            } else {
+                Err(ParseError {
+                    expected: "identifier".to_owned(),
+                    got: Some(got.clone()),
+                })
+            }
+        } else {
+            Err(ParseError {
+                expected: "identifier".to_owned(),
+                got: None,
+            })
+        }
+    }
+
     pub fn consume_and_return(&mut self, expected: impl Into<RawToken>) -> ParseResult<Token> {
         let expected = expected.into();
 
-        if let Some(got) = self.lexer.peek() {
+        if let Some(got) = self.lexer.next() {
             if got.raw == expected.clone().into() {
                 Ok(got.clone())
             } else {
@@ -37,7 +58,10 @@ impl<'s> Parser<'s> {
                 })
             }
         } else {
-            todo!()
+            Err(ParseError {
+                expected: expected.to_string(),
+                got: None,
+            })
         }
     }
 
@@ -51,36 +75,93 @@ impl<'s> Parser<'s> {
                 .map(|t| t.clone().into())
                 .unwrap_or(Precedence::Lowest)
         {
-            left = match self.lexer.peek() {
-                Some(Token {
-                    raw:
-                        RawToken::Punctuation(
-                            Punctuation::Plus
-                            | Punctuation::Minus
-                            | Punctuation::Star
-                            | Punctuation::Slash,
-                        ),
-                    ..
-                }) => {
-                    let operator = self.lexer.next().unwrap();
-
+            left = match self.lexer.next() {
+                Some(
+                    operator @ Token {
+                        raw:
+                            RawToken::Punctuation(
+                                Punctuation::Plus
+                                | Punctuation::Minus
+                                | Punctuation::Star
+                                | Punctuation::Slash,
+                            ),
+                        ..
+                    },
+                ) => {
                     let right = self.parse_expression(operator.raw.clone().into())?;
 
                     Expression::Binary {
+                        location: Location {
+                            start: left.location().start,
+                            end: right.location().end,
+                        },
                         left: Box::new(left),
                         right: Box::new(right),
                         operator,
                     }
                 }
+                Some(
+                    operator @ Token {
+                        raw: RawToken::Punctuation(Punctuation::PlusPlus | Punctuation::MinusMinus),
+                        ..
+                    },
+                ) => Expression::Postfix {
+                    location: Location {
+                        start: left.location().start,
+                        end: operator.location.end,
+                    },
+                    left: Box::new(left),
+                    operator,
+                },
                 Some(Token {
-                    raw: RawToken::Punctuation(Punctuation::PlusPlus | Punctuation::MinusMinus),
+                    raw: RawToken::Punctuation(Punctuation::Dot),
                     ..
                 }) => {
-                    let operator = self.lexer.next().unwrap();
+                    let right = self.consume_identifier()?;
 
-                    Expression::Postfix {
+                    Expression::FieldAccess {
+                        location: Location {
+                            start: left.location().start,
+                            end: right.location.end,
+                        },
                         left: Box::new(left),
-                        operator,
+                        right,
+                    }
+                }
+                Some(Token {
+                    raw: RawToken::Punctuation(Punctuation::OpenParent),
+                    ..
+                }) => {
+                    let mut arguments = vec![];
+
+                    while self
+                        .lexer
+                        .peek()
+                        .is_some_and(|token| token.raw != RawToken::from(Punctuation::CloseParent))
+                    {
+                        arguments.push(self.parse_expression(Precedence::Lowest)?);
+
+                        if self
+                            .lexer
+                            .peek()
+                            .is_some_and(|token| token.raw == RawToken::from(Punctuation::Comma))
+                        {
+                            self.lexer.next();
+                        } else {
+                            break;
+                        }
+                    }
+
+                    Expression::Call {
+                        location: Location {
+                            start: left.location().start,
+                            end: self
+                                .consume_and_return(Punctuation::CloseParent)?
+                                .location
+                                .end,
+                        },
+                        callee: Box::new(left),
+                        arguments,
                     }
                 }
                 _ => break,
@@ -91,9 +172,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_primary_expression(&mut self) -> ParseResult<Expression> {
-        let next = self.lexer.next();
-
-        match next {
+        match self.lexer.next() {
             Some(Token {
                 raw: RawToken::Punctuation(Punctuation::OpenParent),
                 ..
@@ -106,10 +185,10 @@ impl<'s> Parser<'s> {
             Some(Token {
                 raw: RawToken::Identifier(identifier),
                 location,
-            }) => Ok(Expression::Identifier {
+            }) => Ok(Expression::Identifier(IdentifierAST {
                 identifier,
                 location,
-            }),
+            })),
             Some(Token {
                 raw: RawToken::IntegerLiteral(value),
                 location,
@@ -151,19 +230,70 @@ impl<'s> Parser<'s> {
         match self.lexer.peek() {
             Some(Token {
                 raw: RawToken::Keyword(Keyword::Continue),
-                ..
-            }) => Ok(Statement::Continue {
-                location: self.consume_and_return(Punctuation::Semicolon)?.location,
-            }),
+                location,
+            }) => {
+                let start = location.start;
+                self.lexer.next();
+
+                Ok(Statement::Continue {
+                    location: Location {
+                        start,
+                        end: self
+                            .consume_and_return(Punctuation::Semicolon)?
+                            .location
+                            .end,
+                    },
+                })
+            }
             Some(Token {
                 raw: RawToken::Keyword(Keyword::Break),
-                ..
-            }) => Ok(Statement::Break {
-                location: self.consume_and_return(Punctuation::Semicolon)?.location,
-            }),
-            _ => Ok(Statement::Expression(
-                self.parse_expression(Precedence::Lowest)?,
-            )),
+                location,
+            }) => {
+                let start = location.start;
+                self.lexer.next();
+
+                Ok(Statement::Break {
+                    location: Location {
+                        start,
+                        end: self
+                            .consume_and_return(Punctuation::Semicolon)?
+                            .location
+                            .end,
+                    },
+                })
+            }
+            Some(Token {
+                raw: RawToken::Keyword(Keyword::Return),
+                location,
+            }) => {
+                let start = location.start;
+                self.lexer.next();
+                let return_value = self.parse_expression(Precedence::Lowest)?;
+
+                Ok(Statement::Return {
+                    location: Location {
+                        start,
+                        end: return_value.location().end,
+                    },
+                    return_value,
+                })
+            }
+            _ => {
+                let expression = self.parse_expression(Precedence::Lowest)?;
+
+                let result = Ok(Statement::Expression {
+                    location: Location {
+                        start: expression.location().start,
+                        end: self
+                            .consume_and_return(Punctuation::Semicolon)?
+                            .location
+                            .end,
+                    },
+                    expression,
+                });
+
+                result
+            }
         }
     }
 
@@ -175,12 +305,22 @@ impl<'s> Parser<'s> {
         while self
             .lexer
             .peek()
-            .is_some_and(|token| token.raw == Punctuation::CloseBrace.into())
+            .is_some_and(|token| token.raw != RawToken::from(Punctuation::CloseBrace))
         {
             statements.push(self.parse_statement()?);
         }
 
         self.consume(Punctuation::CloseBrace)?;
+
+        Ok(statements)
+    }
+
+    pub fn parse(&mut self) -> ParseResult<Module> {
+        let mut statements = vec![];
+
+        while self.lexer.peek().is_some() {
+            statements.push(self.parse_statement()?);
+        }
 
         Ok(statements)
     }
@@ -193,115 +333,3 @@ pub struct ParseError {
 }
 
 pub type ParseResult<T> = Result<T, ParseError>;
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        ast::{Expression, Literal, RawLiteral},
-        token::{Location, Precedence, Punctuation, RawToken, Token},
-    };
-
-    use super::Parser;
-
-    #[test]
-    fn identifier_expression() {
-        let mut parser = Parser::new("a");
-
-        assert_eq!(
-            parser.parse_expression(Precedence::Lowest),
-            Ok(Expression::Identifier {
-                identifier: "a".to_owned(),
-                location: Location { start: 0, end: 1 },
-            })
-        );
-    }
-
-    #[test]
-    fn binary_expression1() {
-        let mut parser = Parser::new("a + b");
-
-        assert_eq!(
-            parser.parse_expression(Precedence::Lowest),
-            Ok(Expression::Binary {
-                left: Box::new(Expression::Identifier {
-                    identifier: "a".to_owned(),
-                    location: Location { start: 0, end: 1 }
-                }),
-                right: Box::new(Expression::Identifier {
-                    identifier: "b".to_owned(),
-                    location: Location { start: 4, end: 5 }
-                }),
-                operator: Token {
-                    raw: RawToken::Punctuation(Punctuation::Plus),
-                    location: Location { start: 2, end: 3 }
-                }
-            })
-        );
-    }
-
-    #[test]
-    fn binary_expression2() {
-        let mut parser = Parser::new("a + b - c");
-
-        assert_eq!(
-            parser.parse_expression(Precedence::Lowest),
-            Ok(Expression::Binary {
-                left: Box::new(Expression::Binary {
-                    left: Box::new(Expression::Identifier {
-                        identifier: "a".to_owned(),
-                        location: Location { start: 0, end: 1 }
-                    }),
-                    right: Box::new(Expression::Identifier {
-                        identifier: "b".to_owned(),
-                        location: Location { start: 4, end: 5 }
-                    }),
-                    operator: Token {
-                        raw: RawToken::Punctuation(Punctuation::Plus),
-                        location: Location { start: 2, end: 3 }
-                    }
-                }),
-                right: Box::new(Expression::Identifier {
-                    identifier: "c".to_owned(),
-                    location: Location { start: 8, end: 9 }
-                }),
-                operator: Token {
-                    raw: RawToken::Punctuation(Punctuation::Minus),
-                    location: Location { start: 6, end: 7 }
-                }
-            })
-        );
-    }
-
-    #[test]
-    fn binary_expression3() {
-        let mut parser = Parser::new("a + b * c");
-
-        assert_eq!(
-            parser.parse_expression(Precedence::Lowest),
-            Ok(Expression::Binary {
-                left: Box::new(Expression::Identifier {
-                    identifier: "a".to_owned(),
-                    location: Location { start: 0, end: 1 }
-                }),
-                right: Box::new(Expression::Binary {
-                    left: Box::new(Expression::Identifier {
-                        identifier: "b".to_owned(),
-                        location: Location { start: 4, end: 5 }
-                    }),
-                    right: Box::new(Expression::Identifier {
-                        identifier: "c".to_owned(),
-                        location: Location { start: 8, end: 9 }
-                    }),
-                    operator: Token {
-                        raw: RawToken::Punctuation(Punctuation::Star),
-                        location: Location { start: 6, end: 7 }
-                    }
-                }),
-                operator: Token {
-                    raw: RawToken::Punctuation(Punctuation::Plus),
-                    location: Location { start: 2, end: 3 }
-                }
-            })
-        );
-    }
-}

@@ -24,6 +24,7 @@ pub enum Keyword {
     Var,
     Break,
     Continue,
+    Return,
 }
 
 impl fmt::Display for Keyword {
@@ -37,6 +38,7 @@ impl fmt::Display for Keyword {
             Self::Var => "`var`",
             Self::Break => "`break`",
             Self::Continue => "`continue`",
+            Self::Return => "`return`",
         })
     }
 }
@@ -61,6 +63,8 @@ pub enum Punctuation {
     OpenBrace,
     CloseBrace,
     Semicolon,
+    Comma,
+    Dot,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -71,20 +75,24 @@ pub enum Precedence {
     Sum,
     Product,
     Power,
+    Call,
+    FieldAccess,
 }
 
 impl From<Punctuation> for Precedence {
     fn from(value: Punctuation) -> Self {
         match value {
-            Punctuation::PlusEq 
-            | Punctuation::MinusEq 
+            Punctuation::PlusEq
+            | Punctuation::MinusEq
             | Punctuation::StarEq
-            | Punctuation::SlashEq 
-            | Punctuation::PlusPlus 
+            | Punctuation::SlashEq
+            | Punctuation::PlusPlus
             | Punctuation::MinusMinus => Precedence::Assign,
             Punctuation::Plus | Punctuation::Minus => Precedence::Sum,
             Punctuation::Star | Punctuation::Slash => Precedence::Product,
             Punctuation::StarStar => Precedence::Power,
+            Punctuation::OpenParent => Precedence::Call,
+            Punctuation::Dot => Precedence::FieldAccess,
             _ => Precedence::Lowest,
         }
     }
@@ -111,16 +119,18 @@ impl fmt::Display for Punctuation {
             Self::OpenBrace => "`{`",
             Self::CloseBrace => "`}`",
             Self::Semicolon => "`;`",
+            Self::Comma => "`,`",
+            Self::Dot => "`.`",
         })
     }
 }
 
-#[derive(Debug, Clone, PartialEq)] 
-pub enum RawToken { 
-    Identifier(String), 
-    StringLiteral(String), 
-    Keyword(Keyword), 
-    Punctuation(Punctuation), 
+#[derive(Debug, Clone, PartialEq)]
+pub enum RawToken {
+    Identifier(String),
+    StringLiteral(String),
+    Keyword(Keyword),
+    Punctuation(Punctuation),
     BoolLiteral(bool),
     IntegerLiteral(u64),
     FloatLiteral(f64),
@@ -132,11 +142,17 @@ impl fmt::Display for RawToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Keyword(keyword) => keyword.fmt(f),
-            Self::Identifier(name) => f.write_fmt(format_args!("identifier `{}`", name)), 
+            Self::Identifier(name) => f.write_fmt(format_args!("identifier `{}`", name)),
             Self::StringLiteral(value) => value.fmt(f),
             Self::Punctuation(punctuation) => punctuation.fmt(f),
-            Self::BoolLiteral(value) => if *value { f.write_str("`true`") } else { f.write_str("`false`") }
-            Self::IntegerLiteral(value) => value.fmt(f), 
+            Self::BoolLiteral(value) => {
+                if *value {
+                    f.write_str("`true`")
+                } else {
+                    f.write_str("`false`")
+                }
+            }
+            Self::IntegerLiteral(value) => value.fmt(f),
             Self::FloatLiteral(value) => value.fmt(f),
             Self::CharLiteral(value) => f.write_fmt(format_args!("'{}'", value)),
             Self::UnexpectedChar(..) => f.write_str("invalid token"),
@@ -170,6 +186,7 @@ pub static KEYWORDS: phf::Map<&'static str, RawToken> = phf_map! {
     "var" => RawToken::Keyword(Keyword::Var),
     "break" => RawToken::Keyword(Keyword::Break),
     "continue" => RawToken::Keyword(Keyword::Continue),
+    "return" => RawToken::Keyword(Keyword::Return),
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,4 +194,3 @@ pub struct Location {
     pub start: usize,
     pub end: usize,
 }
-
