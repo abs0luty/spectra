@@ -173,6 +173,7 @@ impl Iterator for Lexer<'_> {
             (';', _) => self.advance_with(Punctuation::Semicolon),
             (',', _) => self.advance_with(Punctuation::Comma),
             ('.', _) => self.advance_with(Punctuation::Dot),
+            ('=', _) => self.advance_with(Punctuation::Eq),
             ('"', _) => self.next_string_token(),
             (_, _) => {
                 if is_id_start(self.current) {

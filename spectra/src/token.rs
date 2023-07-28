@@ -65,6 +65,7 @@ pub enum Punctuation {
     Semicolon,
     Comma,
     Dot,
+    Eq,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -121,6 +122,7 @@ impl fmt::Display for Punctuation {
             Self::Semicolon => "`;`",
             Self::Comma => "`,`",
             Self::Dot => "`.`",
+            Self::Eq => "`=`",
         })
     }
 }

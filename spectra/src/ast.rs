@@ -1,7 +1,12 @@
 use crate::token::{Location, Token};
 
 pub type Module = Vec<Statement>;
-pub type StatementsBlock = Vec<Statement>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StatementsBlock {
+    pub statements: Vec<Statement>,
+    pub location: Location,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
@@ -18,6 +23,11 @@ pub enum Statement {
     },
     Continue {
         location: Location,
+    },
+    Var {
+        location: Location,
+        name: IdentifierAST,
+        value: Expression,
     },
 }
 
@@ -58,6 +68,12 @@ pub enum Expression {
         right: IdentifierAST,
         location: Location,
     },
+    // fun (a, b) { a + b }
+    Function {
+        parameters: Vec<IdentifierAST>,
+        block: StatementsBlock,
+        location: Location,
+    },
 }
 
 impl Expression {
@@ -71,7 +87,8 @@ impl Expression {
             | Self::Binary { location, .. }
             | Self::Literal(Literal { location, .. })
             | Self::Call { location, .. }
-            | Self::FieldAccess { location, .. } => *location,
+            | Self::FieldAccess { location, .. }
+            | Self::Function { location, .. } => *location,
         }
     }
 }

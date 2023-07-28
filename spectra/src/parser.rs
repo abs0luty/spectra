@@ -217,6 +217,45 @@ impl<'s> Parser<'s> {
                 raw: RawLiteral::Char(value),
                 location,
             })),
+            Some(Token {
+                raw: RawToken::Keyword(Keyword::Fun),
+                location: Location { start, .. },
+            }) => {
+                self.consume(Punctuation::OpenParent)?;
+
+                let mut parameters = vec![];
+
+                while self
+                    .lexer
+                    .peek()
+                    .is_some_and(|token| token.raw != RawToken::from(Punctuation::CloseParent))
+                {
+                    parameters.push(self.consume_identifier()?);
+
+                    if self
+                        .lexer
+                        .peek()
+                        .is_some_and(|token| token.raw == RawToken::from(Punctuation::Comma))
+                    {
+                        self.lexer.next();
+                    } else {
+                        break;
+                    }
+                }
+
+                self.consume(Punctuation::CloseParent)?;
+
+                let block = self.parse_statements_block()?;
+
+                Ok(Expression::Function {
+                    location: Location {
+                        start,
+                        end: block.location.end,
+                    },
+                    parameters,
+                    block,
+                })
+            }
             got => {
                 return Err(ParseError {
                     expected: "expression".to_owned(),
@@ -273,9 +312,37 @@ impl<'s> Parser<'s> {
                 Ok(Statement::Return {
                     location: Location {
                         start,
-                        end: return_value.location().end,
+                        end: self
+                            .consume_and_return(Punctuation::Semicolon)?
+                            .location
+                            .end,
                     },
                     return_value,
+                })
+            }
+            Some(Token {
+                raw: RawToken::Keyword(Keyword::Var),
+                location,
+            }) => {
+                let start = location.start;
+                self.lexer.next();
+
+                let name = self.consume_identifier()?;
+
+                self.consume(Punctuation::Eq)?;
+
+                let value = self.parse_expression(Precedence::Lowest)?;
+
+                Ok(Statement::Var {
+                    location: Location {
+                        start,
+                        end: self
+                            .consume_and_return(Punctuation::Semicolon)?
+                            .location
+                            .end,
+                    },
+                    name,
+                    value,
                 })
             }
             _ => {
@@ -298,7 +365,10 @@ impl<'s> Parser<'s> {
     }
 
     pub fn parse_statements_block(&mut self) -> ParseResult<StatementsBlock> {
-        self.consume(Punctuation::OpenBrace)?;
+        let start = self
+            .consume_and_return(Punctuation::OpenBrace)?
+            .location
+            .start;
 
         let mut statements = vec![];
 
@@ -310,9 +380,16 @@ impl<'s> Parser<'s> {
             statements.push(self.parse_statement()?);
         }
 
-        self.consume(Punctuation::CloseBrace)?;
-
-        Ok(statements)
+        Ok(StatementsBlock {
+            location: Location {
+                start,
+                end: self
+                    .consume_and_return(Punctuation::CloseBrace)?
+                    .location
+                    .end,
+            },
+            statements,
+        })
     }
 
     pub fn parse(&mut self) -> ParseResult<Module> {
